@@ -23,33 +23,30 @@ Mean AUROC: 0.7854 │ 14 Diseases │ Multi-Label Classification
 
 <div align="center">
 
-```
-                         ┌─────────────────────┐
-                         │   Input Image 224×224 │
-                         └──────────┬──────────┘
-                                    │
-                    ┌───────────────▼───────────────┐
-                    │      DenseNet121 Backbone      │
-                    │   (Pre-trained on ImageNet)    │
-                    └───────┬───────┬───────┬───────┘
-                            │       │       │
-                           p3      p4      p5
-                            │       │       │
-                    ┌───────▼───────▼───────▼───────┐
-                    │   Feature Pyramid Network     │
-                    │         (FPN Fusion)          │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────▼───────────────┐
-                    │    Swin Transformer (Swin-B)  │
-                    │     (Global Context)          │
-                    └───────────────┬───────────────┘
-                                    │
-                    ┌───────────────▼───────────────┐
-                    │   Classifier Head (14 Class)  │
-                    │  LayerNorm → Linear → GELU    │
-                    │  → Dropout → Linear           │
-                    └───────────────────────────────┘
+```mermaid
+flowchart TD
+    A["<b>Input Image</b><br/>224 × 224 × 3"] --> B
+
+    B["<b>DenseNet121 Backbone</b><br/>Pre-trained on ImageNet<br/>─────────────────<br/>conv0 → norm0 → relu0 → pool0<br/>denseblock1 → transition1<br/>denseblock2 → transition2<br/>denseblock3 → transition3<br/>denseblock4 → norm5"]
+    B -->|"p3 (256 ch)"| C
+    B -->|"p4 (512 ch)"| C
+    B -->|"p5 (1024 ch)"| C
+
+    C["<b>Feature Pyramid Network</b><br/>─────────────────<br/>1×1 Conv projection<br/>Top-down pathway<br/>Lateral connections<br/>→ Fused 256-ch feature map"]
+    C --> D
+
+    D["<b>Swin Transformer (Swin-B)</b><br/>─────────────────<br/>Window-based self-attention<br/>Shifted window layers<br/>Global context modeling"]
+    D --> E
+
+    E["<b>Classification Head</b><br/>─────────────────<br/>LayerNorm<br/>Linear (1024 → 512)<br/>GELU Activation<br/>Dropout (0.5)<br/>Linear (512 → 14)"]
+    E --> F["<b>14 Disease Probabilities</b><br/>Sigmoid → Multi-label Prediction"]
+
+    style A fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    style B fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#bf360c
+    style C fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+    style D fill:#fce4ec,stroke:#c62828,stroke-width:2px,color:#b71c1c
+    style E fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c
+    style F fill:#e0f7fa,stroke:#00695c,stroke-width:2px,color:#004d40
 ```
 
 </div>
@@ -84,12 +81,15 @@ Mean AUROC: 0.7854 │ 14 Diseases │ Multi-Label Classification
 
 <div align="center">
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| Atelectasis | Cardiomegaly | Effusion | Infiltration |
-| Mass | Nodule | Pneumonia | Pneumothorax |
-| Consolidation | Edema | Emphysema | Fibrosis |
-| Pleural Thickening | Hernia | | |
+| # | Disease | | # | Disease |
+|:-:|:--------|:-:|:-:|:--------|
+| 1 | Atelectasis | | 8 | Pneumothorax |
+| 2 | Cardiomegaly | | 9 | Consolidation |
+| 3 | Effusion | | 10 | Edema |
+| 4 | Infiltration | | 11 | Emphysema |
+| 5 | Mass | | 12 | Fibrosis |
+| 6 | Nodule | | 13 | Pleural Thickening |
+| 7 | Pneumonia | | 14 | Hernia |
 
 </div>
 
