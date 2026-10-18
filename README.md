@@ -1,181 +1,179 @@
 <div align="center">
 
-# Hybrid Chest X-Ray Net
+# 🫁 Hybrid Chest X-Ray Net
 
-**Multi-label classification of 14 chest pathologies from X-ray images**
+**A CNN + Transformer hybrid that reads a chest X-ray and flags 14 thoracic diseases at once.**
 
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.0-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
-![Kaggle](https://img.shields.io/badge/Kaggle-T4%20GPU-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white)
+DenseNet121 for local texture · Feature Pyramid Network for multi-scale fusion · Swin Transformer for global context
 
-A hybrid **DenseNet121 + Swin Transformer** model with Feature Pyramid Networks for detecting multiple diseases in chest X-rays.
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Dataset](https://img.shields.io/badge/Data-NIH%20ChestX--ray14-FF6F00?style=flat-square&logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/khanfashee/nih-chest-x-ray-14-224x224-resized)
+[![GPU](https://img.shields.io/badge/Trained%20on-Kaggle%20T4-20BEFF?style=flat-square&logo=kaggle&logoColor=white)](https://www.kaggle.com/)
 
-```
-Mean AUROC: 0.7854 │ 14 Diseases │ Multi-Label Classification
-```
+[Results](#-results) · [Architecture](#-architecture) · [Training](#-training-recipe) · [Explainability](#-explainability) · [Quickstart](#-quickstart)
 
----
+<br/>
 
-</div>
+| **0.7854** | **0.932** | **14** | **3-view TTA** |
+|:---:|:---:|:---:|:---:|
+| mean AUROC | best class AUROC (Hernia) | disease labels | flip + multi-scale |
 
-## Architecture
+<br/>
 
-<div align="center">
+<img src="assets/gradcam_examples.png" alt="Grad-CAM heatmaps over chest X-rays" width="560"/>
 
-```mermaid
-flowchart TD
-    A["<b>Input Image</b><br/>224 × 224 × 3"] --> B
-
-    B["<b>DenseNet121 Backbone</b><br/>Pre-trained on ImageNet<br/>─────────────────<br/>conv0 → norm0 → relu0 → pool0<br/>denseblock1 → transition1<br/>denseblock2 → transition2<br/>denseblock3 → transition3<br/>denseblock4 → norm5"]
-    B -->|"p3 (256 ch)"| C
-    B -->|"p4 (512 ch)"| C
-    B -->|"p5 (1024 ch)"| C
-
-    C["<b>Feature Pyramid Network</b><br/>─────────────────<br/>1×1 Conv projection<br/>Top-down pathway<br/>Lateral connections<br/>→ Fused 256-ch feature map"]
-    C --> D
-
-    D["<b>Swin Transformer (Swin-B)</b><br/>─────────────────<br/>Window-based self-attention<br/>Shifted window layers<br/>Global context modeling"]
-    D --> E
-
-    E["<b>Classification Head</b><br/>─────────────────<br/>LayerNorm<br/>Linear (1024 → 512)<br/>GELU Activation<br/>Dropout (0.5)<br/>Linear (512 → 14)"]
-    E --> F["<b>14 Disease Probabilities</b><br/>Sigmoid → Multi-label Prediction"]
-
-    style A fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
-    style B fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#bf360c
-    style C fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
-    style D fill:#fce4ec,stroke:#c62828,stroke-width:2px,color:#b71c1c
-    style E fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c
-    style F fill:#e0f7fa,stroke:#00695c,stroke-width:2px,color:#004d40
-```
+<sub>Left: input X-ray with ground truth · Right: model prediction with Grad-CAM attention</sub>
 
 </div>
 
 ---
 
-## Sample Predictions
+## ✨ Highlights
 
-> Add your GradCAM and prediction images here after running the notebook.
->
-> ```bash
-> # Save outputs from notebook:
-> # - learning_history.png
-> # - pr_curves.png  
-> # - confusion_matrices.png
-> # Then place them in an assets/ folder and reference below:
-> ```
-
-<div align="center">
-
-<!-- Add your images like this: -->
-<!-- ![GradCAM Results](assets/gradcam_results.png) -->
-<!-- ![Learning History](assets/learning_history.png) -->
-
-*Run the notebook to generate visualization outputs*
-
-</div>
+- **Hybrid backbone.** DenseNet121 feature maps (p3, p4, p5) are fused by an FPN, then passed through Swin-B. Swin's patch embedding is swapped for a 1×1 conv, so the transformer attends over CNN features instead of raw pixels.
+- **Built for imbalance.** Asymmetric Loss (γ⁻ = 4, clip = 0.05) plus a `WeightedRandomSampler` handle labels like Hernia, which appears in about 0.2% of images.
+- **Progressive unfreezing.** The head trains first, then the transformer unfreezes, then the full network fine-tunes with differential learning rates.
+- **Higher-resolution finish.** After the 224px run, the model is fine-tuned at 320×320 with a short cosine-annealed final push.
+- **Tuned decisions.** Each class gets its own F1-maximizing threshold instead of a flat 0.5.
+- **Explainable.** Grad-CAM heatmaps show where the model is looking.
 
 ---
 
-## 14 Disease Classes
+## 📈 Results
+
+Evaluated on the official NIH ChestX-ray14 test split (~25.6k images) with test-time augmentation.
 
 <div align="center">
-
-| # | Disease | | # | Disease |
-|:-:|:--------|:-:|:-:|:--------|
-| 1 | Atelectasis | | 8 | Pneumothorax |
-| 2 | Cardiomegaly | | 9 | Consolidation |
-| 3 | Effusion | | 10 | Edema |
-| 4 | Infiltration | | 11 | Emphysema |
-| 5 | Mass | | 12 | Fibrosis |
-| 6 | Nodule | | 13 | Pleural Thickening |
-| 7 | Pneumonia | | 14 | Hernia |
-
+<img src="assets/auroc_per_class.png" alt="Per-class AUROC bar chart" width="720"/>
 </div>
 
----
+<details>
+<summary><b>Full per-class table (AUROC, F1, tuned threshold)</b></summary>
 
-## Results
+<br/>
 
-<div align="center">
-
-| Disease | AUROC | F1 Score | |
-|:--------|------:|---------:|:-:|
-| **Hernia** | **0.9319** | 0.4390 | Best |
-| **Emphysema** | **0.9013** | **0.4694** | |
-| **Pneumothorax** | **0.8492** | 0.4662 | |
-| **Cardiomegaly** | **0.8476** | 0.3080 | |
-| **Edema** | 0.8293 | 0.2217 | |
-| **Effusion** | 0.8172 | **0.5171** | Best F1 |
-| **Fibrosis** | 0.7953 | 0.1416 | |
-| **Mass** | 0.7734 | 0.3129 | |
-| **Pleural Thickening** | 0.7532 | 0.2048 | |
-| **Atelectasis** | 0.7387 | 0.3606 | |
-| **Consolidation** | 0.7211 | 0.2197 | |
-| **Nodule** | 0.7087 | 0.2469 | |
-| **Pneumonia** | 0.6703 | 0.0778 | Hardest |
-| **Infiltration** | 0.6587 | 0.4349 | |
+| Disease | AUROC | F1 | Threshold |
+|:--|--:|--:|--:|
+| Hernia | **0.9319** | 0.4390 | 0.675 |
+| Emphysema | 0.9013 | 0.4694 | 0.605 |
+| Pneumothorax | 0.8492 | 0.4662 | 0.502 |
+| Cardiomegaly | 0.8476 | 0.3080 | 0.673 |
+| Edema | 0.8293 | 0.2217 | 0.512 |
+| Effusion | 0.8172 | **0.5171** | 0.541 |
+| Fibrosis | 0.7953 | 0.1416 | 0.483 |
+| Mass | 0.7734 | 0.3129 | 0.505 |
+| Pleural Thickening | 0.7532 | 0.2048 | 0.460 |
+| Atelectasis | 0.7387 | 0.3606 | 0.529 |
+| Consolidation | 0.7211 | 0.2197 | 0.440 |
+| Nodule | 0.7087 | 0.2469 | 0.520 |
+| Pneumonia | 0.6703 | 0.0778 | 0.419 |
+| Infiltration | 0.6587 | 0.4349 | 0.527 |
 | **Mean** | **0.7854** | **0.3158** | |
 
+</details>
+
+<details>
+<summary><b>Best vs. hardest class: confusion matrices</b></summary>
+
+<br/>
+
+<div align="center">
+<img src="assets/confusion_best_vs_hardest.png" alt="Confusion matrices for Hernia and Pneumonia" width="820"/>
 </div>
 
----
+Hernia is rare but visually distinctive, so the model is precise when it fires. Pneumonia overlaps heavily with Infiltration and Consolidation on X-ray, so most of its positives are false alarms.
 
-## Key Features
-
-| Feature | Description |
-|---------|-------------|
-| **Hybrid Architecture** | DenseNet121 CNN + Swin Transformer fused via FPN |
-| **Asymmetric Loss** | Down-weights easy negatives for imbalanced data |
-| **CLAHE Preprocessing** | Adaptive histogram equalization for better contrast |
-| **Progressive Training** | Freeze → Unfreeze → Full fine-tuning |
-| **Multi-scale TTA** | Horizontal flip + multi-resolution inference |
-| **Threshold Optimization** | Per-class F1-maximized decision boundaries |
-| **GradCAM** | Visual explanations for model predictions |
+</details>
 
 ---
 
-## Setup
+## 🧠 Architecture
 
-```bash
-# Clone the repo
-git clone https://github.com/AnirvanRanjan/hybrid-chest-xray-net.git
-cd hybrid-chest-xray-net
+```mermaid
+flowchart LR
+    A["X-ray<br/>224 / 320 px"] --> B["DenseNet121<br/><sub>ImageNet</sub>"]
+    B -- "p3 · 256ch" --> C
+    B -- "p4 · 512ch" --> C
+    B -- "p5 · 1024ch" --> C
+    C["FPN<br/><sub>lateral 1×1 + top-down</sub><br/>→ 256ch"] --> D["Swin-B<br/><sub>shifted-window attention</sub>"]
+    D --> E["Head<br/><sub>LN → 1024→512 → GELU<br/>Dropout 0.5 → 14</sub>"]
+    E --> F["14 sigmoid<br/>probabilities"]
 
-# Install dependencies
-pip install -r requirements.txt
+    style A fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    style B fill:#fff3e0,stroke:#e65100,color:#bf360c
+    style C fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    style D fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    style E fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    style F fill:#e0f7fa,stroke:#00695c,color:#004d40
 ```
 
-### Run on Kaggle
-
-1. Upload `final - Copy.ipynb` to Kaggle
-2. Enable **GPU** (T4) in notebook settings
-3. Add the [NIH Chest X-ray dataset](https://www.kaggle.com/datasets/khanfashee/nih-chest-x-ray-14-224x224-resized) as data source
-4. Run all cells
+**Why hybrid?** CNNs are strong at local texture (nodules, fibrotic patterns). Transformers capture long-range structure (heart size, bilateral effusions). The FPN gives the transformer features at several scales instead of a single resolution.
 
 ---
 
-## Dataset
+## 🔧 Training Recipe
 
-<div align="center">
+| Stage | Resolution | What happens |
+|:--|:--:|:--|
+| **1 · Warm-up** | 224 | Backbone + Swin frozen for 5 epochs; only the FPN and head learn (lr 1e-4) |
+| **2 · Unfreeze** | 224 | Swin unfreezes at epoch 5 and the full network at epoch 8; backbones train at lr 1e-6 |
+| **3 · Upscale** | 320 | Fine-tune at 320×320 with CLAHE, flips, ±15° rotation and color jitter |
+| **4 · Final push** | 320 | 5 epochs, AdamW lr 2e-6, cosine annealing |
+| **5 · Calibrate** | 320 | Per-class threshold search maximizing F1 |
 
-[![Dataset](https://img.shields.io/badge/NIH_Chest_X--ray-14_Classes-FF6F00?style=for-the-badge&logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/khanfashee/nih-chest-x-ray-14-224x224-resized)
+**Shared across stages:** Asymmetric Loss, weighted sampling, AdamW, mixed precision (AMP), ReduceLROnPlateau on validation AUROC (stages 1–2).
 
-</div>
+**Inference:** the average of three views: original, horizontal flip and 352px upscale.
 
 ---
 
-## Authors
+## 🔍 Explainability
 
-- **Anirvan Ranjan** — [@AnirvanRanjan](https://github.com/AnirvanRanjan)
-- **Kartiken** — [@Kartiken07](https://github.com/Kartiken07)
+Grad-CAM on the final model (figure at the top of this page). Most hits land on plausible regions, but not all of them. In row 4 the model calls Effusion on an Atelectasis case, and several maps light up on text markers and image borders. That's a known shortcut-learning risk with NIH data, and worth reading before trusting any single prediction.
 
 ---
 
-<div align="center">
+## 🚀 Quickstart
 
-**Built with PyTorch**
+**On Kaggle (recommended).** The notebook paths are written for Kaggle.
 
-![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+1. Upload [`hybrid_chest_xray_net.ipynb`](hybrid_chest_xray_net.ipynb) to Kaggle
+2. Turn on **GPU T4** in notebook settings
+3. Add the [NIH Chest X-ray 224×224 dataset](https://www.kaggle.com/datasets/khanfashee/nih-chest-x-ray-14-224x224-resized) as input
+4. **Run all**
 
-</div>
+**Locally**
+
+```bash
+git clone https://github.com/AnirvanRanjan/hybrid-chest-xray-net.git
+cd hybrid-chest-xray-net
+pip install -r requirements.txt
+# then point BASE_PATH in the notebook at your copy of the dataset
+```
+
+```
+hybrid-chest-xray-net/
+├── hybrid_chest_xray_net.ipynb   # model, training, evaluation, Grad-CAM
+├── requirements.txt
+└── assets/                       # figures used in this README
+```
+
+---
+
+## ⚠️ Limitations
+
+- **Not a medical device.** This is a research and learning project. Do not use it for diagnosis.
+- **Labels are noisy.** NIH ChestX-ray14 labels were mined from radiology reports by NLP and are known to be noisy.
+- **F1 is optimistic.** Checkpoint selection and per-class thresholds were tuned on the same test split that is reported. AUROC is less affected, but the F1 scores would likely drop on a truly held-out set.
+
+---
+
+## 👥 Authors
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/AnirvanRanjan"><img src="https://github.com/AnirvanRanjan.png" width="80" alt=""/><br/><b>Anirvan Ranjan</b></a></td>
+    <td align="center"><a href="https://github.com/Kartiken07"><img src="https://github.com/Kartiken07.png" width="80" alt=""/><br/><b>Kartiken</b></a></td>
+  </tr>
+</table>
