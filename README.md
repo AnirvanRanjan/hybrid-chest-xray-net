@@ -139,7 +139,7 @@ flowchart TD
 
 ```bash
 # Clone the repo
-git clone https://github.com/Kartiken07/hybrid-chest-xray-net.git
+git clone https://github.com/AnirvanRanjan/hybrid-chest-xray-net.git
 cd hybrid-chest-xray-net
 
 # Install dependencies
@@ -162,6 +162,13 @@ pip install -r requirements.txt
 [![Dataset](https://img.shields.io/badge/NIH_Chest_X--ray-14_Classes-FF6F00?style=for-the-badge&logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/khanfashee/nih-chest-x-ray-14-224x224-resized)
 
 </div>
+
+---
+
+## Authors
+
+- **Anirvan Ranjan** — [@AnirvanRanjan](https://github.com/AnirvanRanjan)
+- **Kartiken** — [@Kartiken07](https://github.com/Kartiken07)
 
 ---
 
