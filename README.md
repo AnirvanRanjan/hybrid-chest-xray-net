@@ -33,7 +33,7 @@ The protocol:
 | B | Hybrid | ASL | none | 224 | 0.774 (0.766–0.781) | 0.306 |
 | E | Hybrid (B fine-tuned) | ASL | none | 320 + TTA | 0.790 (0.784–0.796) | 0.307 |
 | C | DenseNet-121 | BCE | none | 224 | 0.805 (0.798–0.811) | **0.014** |
-| D | DenseNet-121 | ASL | imbalance-aware | 224 | **0.807** (0.800–0.812) | 0.286 |
+| D | DenseNet-121 | ASL | none | 224 | **0.807** (0.800–0.812) | 0.286 |
 | T | Hybrid, tuned recipe (fixed before running) | BCE | none | 320 + TTA | 0.803 (0.796–0.810) | 0.016 |
 
 ECE is the expected calibration error, with 10 equal-count bins.
