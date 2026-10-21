@@ -1,0 +1,8 @@
+{
+  "train_images": 77719,
+  "train_patients": 25207,
+  "val_images": 8805,
+  "val_patients": 2801,
+  "test_images": 25596,
+  "test_patients": 2797
+}
