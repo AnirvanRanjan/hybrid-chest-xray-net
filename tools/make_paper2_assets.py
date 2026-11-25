@@ -322,7 +322,7 @@ def scatter_cols(ax, xs, getter, jitter=0.13):
     for (a, l), run in RUN.items():
         off = {"densenet": -jitter, "swin": 0.0, "hybrid": jitter}[a]
         ys = [getter(run, x) for x in xs]
-        ax.scatter(np.arange(len(xs)) + off, ys, color=COL[l], marker=AMARK[a], s=16, edgecolor="white", linewidth=0.5, zorder=3)
+        ax.scatter(np.arange(len(xs)) + off, ys, color=COL[l], marker=AMARK[a], s=16, edgecolor="white", linewidth=0.5, zorder=4, clip_on=False)
 
 
 def legend_two(fig, y=0.995):
