@@ -69,14 +69,17 @@ def get_args():
                         "'auto' searches /kaggle/input")
     p.add_argument("--out_dir", default="/kaggle/working")
     p.add_argument("--run_name", required=True)
-    p.add_argument("--model", choices=["hybrid", "densenet"], default="hybrid")
-    p.add_argument("--loss", choices=["asl", "bce"], default="asl")
+    p.add_argument("--model", choices=["hybrid", "densenet", "swin"], default="hybrid")
+    p.add_argument("--loss", choices=["asl", "bce", "wbce", "focal"], default="asl",
+                   help="wbce: BCE with pos_weight = n_neg / n_pos per class (training split); focal: gamma 2, no alpha")
     p.add_argument("--sampler", choices=["none", "floor"], default="floor")
     p.add_argument("--stage", type=int, choices=[224, 320], default=224)
     p.add_argument("--init", default=None, help="checkpoint to start the 320 stage from")
     p.add_argument("--resume", default=None, help="last.pt of an interrupted run")
     p.add_argument("--val_frac", type=float, default=0.10, help="fraction of train_val PATIENTS used for validation")
-    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--seed", type=int, default=42, help="initialisation, sample order and augmentation")
+    p.add_argument("--split_seed", type=int, default=None,
+                   help="validation-patient split; defaults to --seed (seed 42 = the split used by every run so far)")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch_size", type=int, default=None)
     p.add_argument("--patience", type=int, default=7)
@@ -319,9 +322,37 @@ class DenseNetBaseline(nn.Module):
         return self.net(x)
 
 
+class SwinBaseline(nn.Module):
+    """Swin-B on the image (standard 4x4 patch embedding, ImageNet-1k weights) with a 14-way linear head.
+    Paper 2 only."""
+    def __init__(self):
+        super().__init__()
+        m = swin_b(weights=Swin_B_Weights.IMAGENET1K_V1)
+        m.head = nn.Linear(1024, NUM_CLASSES)
+        self.net = m
+
+    def forward(self, x):
+        return self.net(x)
+
+
 # ----------------------------------------------------------------------------
 # Losses
 # ----------------------------------------------------------------------------
+class FocalLoss(nn.Module):
+    """Sigmoid focal loss (Lin et al., 2017) with gamma = 2 and no alpha weighting, so that it differs
+    from BCE only in down-weighting easy examples. Paper 2 only."""
+    def __init__(self, gamma=2.0):
+        super().__init__()
+        self.gamma = gamma
+
+    def forward(self, x, y):
+        x = x.float()
+        bce = F.binary_cross_entropy_with_logits(x, y, reduction="none")
+        p = torch.sigmoid(x)
+        p_t = p * y + (1 - p) * (1 - y)
+        return (bce * (1 - p_t).pow(self.gamma)).mean()
+
+
 class AsymmetricLoss(nn.Module):
     """ASL (Ridnik et al., 2021), written to match the paper's Eq. 7: the negative term is
     weighted by p_m^gamma_neg with p_m = max(p - clip, 0). (The old notebook weighted it by the
@@ -404,6 +435,8 @@ def build_optimizer(model, args):
             {"params": model.fpn.parameters(), "lr": 1e-4},
             {"params": model.classifier.parameters(), "lr": 1e-4},
         ], weight_decay=1e-4)
+    if args.model == "swin":
+        return torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=1e-4)   # as Swin in the tuned hybrid
     return torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
 
 
@@ -437,6 +470,8 @@ def per_class_report(y, p, th):
 # ----------------------------------------------------------------------------
 def main():
     args = get_args()
+    if args.split_seed is None:
+        args.split_seed = args.seed
     t_start = time.time()
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -446,7 +481,7 @@ def main():
         json.dump(vars(args), f, indent=2)
 
     df = load_metadata(args.data_dir)
-    tr, va, te = make_splits(df, args.data_dir, args.val_frac, args.seed)
+    tr, va, te = make_splits(df, args.data_dir, args.val_frac, args.split_seed)
     if args.debug_n:
         tr, va, te = tr.head(args.debug_n), va.head(args.debug_n), te.head(args.debug_n)
     split_info = {
@@ -483,13 +518,20 @@ def main():
     va_dl = DataLoader(va_ds, batch_size=args.batch_size * 2, shuffle=False, num_workers=args.workers, pin_memory=True)
     te_dl = DataLoader(te_ds, batch_size=args.batch_size * 2, shuffle=False, num_workers=args.workers, pin_memory=True)
 
-    model = (HybridModel() if args.model == "hybrid" else DenseNetBaseline()).to(device)
+    model = {"hybrid": HybridModel, "densenet": DenseNetBaseline, "swin": SwinBaseline}[args.model]().to(device)
     if args.init:
         model.load_state_dict(torch.load(args.init, map_location=device)["model"])
         print(f"Initialised from {args.init}")
 
     if args.loss == "bce":
         criterion = nn.BCEWithLogitsLoss()
+    elif args.loss == "wbce":
+        n_pos = np.asarray(tr_ds.labels).sum(axis=0)
+        pos_weight = torch.as_tensor((len(tr_ds.labels) - n_pos) / np.maximum(n_pos, 1), dtype=torch.float32)
+        print("wbce pos_weight: " + ", ".join(f"{c}={w:.1f}" for c, w in zip(CLASSES, pos_weight.tolist())))
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device))
+    elif args.loss == "focal":
+        criterion = FocalLoss(gamma=2.0)
     elif args.stage == 224:
         criterion = AsymmetricLoss(gamma_neg=4, gamma_pos=0, clip=0.05)
     else:

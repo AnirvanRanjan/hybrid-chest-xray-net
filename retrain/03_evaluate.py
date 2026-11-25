@@ -422,7 +422,7 @@ def cmd_run(a):
         R[f"top_pair_{name}_n"] = fint(co[iu][i])
     for _, r in cal.iterrows():
         for m in ["brier", "ece_q10", "cal_slope", "cal_intercept"]:
-            R[f"{m}.{r['class']}"] = f3(r[m])
+            R[f"{m}.{r['class']}"] = (f2 if m.startswith("cal_") else f3)(r[m])   # slopes/intercepts: 2 dp, as in the tables
     for r in sg[(sg["class"] == "macro")].itertuples():
         R[f"sub.{r.attribute}.{KEY[r.group]}.auroc"] = f3(r.value)
         R[f"sub.{r.attribute}.{KEY[r.group]}.auroc_lo"], R[f"sub.{r.attribute}.{KEY[r.group]}.auroc_hi"] = f3(r.ci_lo), f3(r.ci_hi)
@@ -717,7 +717,7 @@ def cmd_compare(a):
         _, yy, pp = runs[n]
         cal = pd.DataFrame([calibration_row(yy[:, k], pp[:, k]) for k in range(len(CLASSES))]).mean()
         for m in ["brier", "ece_q10", "cal_slope", "cal_intercept", "mean_pred", "prevalence"]:
-            R[f"{n}.{m}"] = f3(cal[m])
+            R[f"{n}.{m}"] = (f2 if m.startswith("cal_") else f3)(cal[m])   # slopes/intercepts: 2 dp, as in the tables
         R[f"{n}.overprediction"] = f"{cal['mean_pred'] / cal['prevalence']:.1f}"
         lines_c.append(f"{labels[n]} & {cal['mean_pred']:.3f} / {cal['prevalence']:.3f} & {f3(cal['brier'])} & "
                        f"{f3(cal['ece_q10'])} & {f2(cal['cal_slope'])} & {f2(cal['cal_intercept'])} \\\\")

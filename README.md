@@ -87,6 +87,24 @@ The original notebook `hybrid_chest_xray_net.ipynb` is kept for reference only. 
 
 `tools/make_architecture_figure.py` draws the architecture figure.
 
+## 📉 Follow-up: calibration study
+
+A follow-up study uses the same pipeline to ask how imbalance-handling losses change calibration, whether post-hoc recalibration fixes it, and how NIH-fitted calibration and thresholds transfer to CheXpert. It trains DenseNet-121, Swin-B and the hybrid with BCE, weighted BCE, focal loss and ASL (`02_train.py --model densenet|swin|hybrid --loss bce|wbce|focal|asl`). Every map and threshold is fitted on NIH validation predictions; the NIH test list and CheXpert are only evaluated.
+
+| Script | Runs on | What it does |
+|:--|:--|:--|
+| `06_recalibrate.py` | CPU | Temperature, per-class Platt and isotonic recalibration; ECE, Brier, slope, intercept with patient-bootstrap CIs. |
+| `07_subgroup_calibration.py` | CPU | Calibration by sex and age, with population-wide and per-group maps. |
+| `08_thresholds.py` | CPU | F1-optimal and sensitivity-0.8 thresholds, underdiagnosis and subgroup gaps on the NIH test list. |
+| `kaggle/chexpert_cache.ipynb` | Kaggle CPU | Builds a 384 px CheXpert Plus cache (needs your own Redivis access token as a Kaggle secret). |
+| `09_infer_external.py` | Kaggle GPU | Runs the frozen NIH models on the CheXpert cache (checks NIH test predictions are reproduced first). |
+| `09_external.py` | CPU | External evaluation on CheXpert: AUROC, calibration, thresholds, subgroups. |
+| `10_paper2_extras.py` – `14_review3_checks.py` | CPU | 7-class NIH baselines, case-mix and Holm-adjusted subgroup tests, calibration CIs, seed variability, prior-shift and other robustness checks. |
+
+`tools/make_paper2_assets.py` builds the manuscript tables and figures from these outputs.
+
+CheXpert data are not redistributed here, and no CheXpert images, labels or per-image predictions are included. To rerun the external evaluation, register for CheXpert Plus with the Stanford AIMI Center and accept its research use agreement.
+
 ## Data
 
 NIH ChestX-ray14 ([NIH Clinical Center](https://nihcc.app.box.com/v/ChestXray-NIHCC)).
